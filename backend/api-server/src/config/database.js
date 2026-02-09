@@ -1,54 +1,53 @@
-const mongoose = require('mongoose');
-const logger = require('../utils/logger');
+import dotenv from 'dotenv';
+dotenv.config();
 
+import mongoose from 'mongoose';
+import logger from '../utils/logger.js';
+
+/* ------------------------------------------------------------------
+   MongoDB Connection
+------------------------------------------------------------------ */
 const connectDB = async () => {
   try {
+    if (!process.env.MONGODB_URI) {
+      throw new Error('MONGODB_URI is not defined in environment variables');
+    }
+
     const options = {
-      // Connection options
-      maxPoolSize: 10, // Maximum number of connections in the pool
-      minPoolSize: 5,  // Minimum number of connections
-      socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
-      serverSelectionTimeoutMS: 10000, // Timeout for selecting a server
-      family: 4, // Use IPv4
+      maxPoolSize: 10,
+      minPoolSize: 5,
+      socketTimeoutMS: 45000,
+      serverSelectionTimeoutMS: 10000,
+      family: 4
     };
 
-    // Connect to MongoDB
     const conn = await mongoose.connect(process.env.MONGODB_URI, options);
 
-    logger.info(`MongoDB Connected: ${conn.connection.host}`);
-    logger.info(`Database Name: ${conn.connection.name}`);
+    logger.info(`✅ MongoDB Connected: ${conn.connection.host}`);
+    logger.info(`📦 Database Name: ${conn.connection.name}`);
 
-    // Handle connection events
-    mongoose.connection.on('connected', () => {
-      logger.info('Mongoose connected to MongoDB');
-    });
-
-    mongoose.connection.on('error', (err) => {
-      logger.error('Mongoose connection error:', err);
-    });
-
-    mongoose.connection.on('disconnected', () => {
-      logger.warn('Mongoose disconnected from MongoDB');
-    });
-
-    // Graceful shutdown
-    process.on('SIGINT', async () => {
-      await mongoose.connection.close();
-      logger.info('Mongoose connection closed due to application termination');
-      process.exit(0);
-    });
+    // Connection Events (singleton to prevent duplicates)
+    if (!mongoose.connection._eventsRegistered) {
+      mongoose.connection.on('connected', () => logger.info('Mongoose connected'));
+      mongoose.connection.on('error', (err) => logger.error('Mongoose connection error', err));
+      mongoose.connection.on('disconnected', () => logger.warn('Mongoose disconnected'));
+      mongoose.connection._eventsRegistered = true;
+    }
 
     return conn;
   } catch (error) {
-    logger.error('MongoDB connection error:', error);
-    process.exit(1); // Exit process with failure
+    logger.error('❌ MongoDB connection failed', error);
+    process.exit(1);
   }
 };
 
-// Function to check database health
+/* ------------------------------------------------------------------
+   Health Check
+------------------------------------------------------------------ */
 const checkDatabaseHealth = async () => {
   try {
     const state = mongoose.connection.readyState;
+
     const states = {
       0: 'disconnected',
       1: 'connected',
@@ -57,7 +56,7 @@ const checkDatabaseHealth = async () => {
     };
 
     return {
-      status: states[state],
+      status: states[state] || 'unknown',
       isHealthy: state === 1,
       host: mongoose.connection.host,
       name: mongoose.connection.name
@@ -71,4 +70,4 @@ const checkDatabaseHealth = async () => {
   }
 };
 
-module.exports = { connectDB, checkDatabaseHealth };
+export { connectDB, checkDatabaseHealth };

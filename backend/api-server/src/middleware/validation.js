@@ -1,4 +1,4 @@
-const { validationResult, body, param, query } = require('express-validator');
+import { validationResult, body, param, query } from 'express-validator';
 
 /**
  * Middleware to check validation results
@@ -187,7 +187,7 @@ const citationValidation = [
   validate
 ];
 
-module.exports = {
+export {
   validate,
   registerValidation,
   loginValidation,

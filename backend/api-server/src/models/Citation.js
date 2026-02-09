@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const citationSchema = new mongoose.Schema(
   {
@@ -165,4 +165,4 @@ citationSchema.methods.addUsage = function(documentName, documentType) {
 
 const Citation = mongoose.model('Citation', citationSchema);
 
-module.exports = Citation;
+export default Citation;

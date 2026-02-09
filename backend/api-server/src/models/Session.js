@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const sessionSchema = new mongoose.Schema(
   {
@@ -293,4 +293,4 @@ sessionSchema.statics.getSessionDetails = function(sessionId, userId) {
 
 const Session = mongoose.model('Session', sessionSchema);
 
-module.exports = Session;
+export default Session;

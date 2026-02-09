@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const paperSchema = new mongoose.Schema(
   {
@@ -252,4 +252,4 @@ paperSchema.methods.incrementViewCount = function() {
 
 const Paper = mongoose.model('Paper', paperSchema);
 
-module.exports = Paper;
+export default Paper;

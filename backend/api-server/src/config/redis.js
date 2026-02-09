@@ -1,168 +1,151 @@
-const Redis = require('ioredis');
-const logger = require('../utils/logger');
+import Redis from 'ioredis';
+import logger from '../utils/logger.js';
 
 let redisClient = null;
 
+/* ------------------------------------------------------------------
+   Redis Connection
+------------------------------------------------------------------ */
 const connectRedis = async () => {
   try {
-    // Create Redis client
     redisClient = new Redis({
-      host: process.env.REDIS_HOST || 'localhost',
-      port: process.env.REDIS_PORT || 6379,
+      host: process.env.REDIS_HOST || '127.0.0.1',
+      port: Number(process.env.REDIS_PORT) || 6379,
       password: process.env.REDIS_PASSWORD || undefined,
-      db: process.env.REDIS_DB || 0,
-      retryStrategy: (times) => {
-        const delay = Math.min(times * 50, 2000);
-        return delay;
-      },
+      db: Number(process.env.REDIS_DB) || 0,
+      retryStrategy: (times) => Math.min(times * 50, 2000),
       maxRetriesPerRequest: 3,
       enableReadyCheck: true,
       enableOfflineQueue: true
     });
 
-    // Event handlers
+    /* --------------------------------------------------------------
+       Events
+    -------------------------------------------------------------- */
     redisClient.on('connect', () => {
-      logger.info('Redis client connecting...');
+      logger.info('Redis connecting...');
     });
 
     redisClient.on('ready', () => {
-      logger.info('Redis client is ready');
+      logger.info('Redis ready');
     });
 
     redisClient.on('error', (err) => {
-      logger.error('Redis client error:', err);
+      logger.error('Redis error', err);
     });
 
     redisClient.on('close', () => {
-      logger.warn('Redis client connection closed');
+      logger.warn('Redis connection closed');
     });
 
     redisClient.on('reconnecting', () => {
-      logger.info('Redis client reconnecting...');
+      logger.info('Redis reconnecting...');
     });
 
-    // Wait for connection to be established
+    // Ensure connection works
     await redisClient.ping();
-    logger.info('Redis connected successfully');
+    logger.info('✅ Redis connected');
 
     return redisClient;
   } catch (error) {
-    logger.error('Redis connection error:', error);
-    // Don't exit process - allow app to run without Redis cache
+    logger.warn('⚠️ Redis unavailable, continuing without cache');
+    logger.error(error);
+    redisClient = null;
     return null;
   }
 };
 
-// Get Redis client instance
-const getRedisClient = () => {
-  return redisClient;
-};
+/* ------------------------------------------------------------------
+   Client Getter
+------------------------------------------------------------------ */
+const getRedisClient = () => redisClient;
 
-// Cache helper functions
+/* ------------------------------------------------------------------
+   Cache Helpers
+------------------------------------------------------------------ */
 const cacheHelpers = {
-  /**
-   * Get value from cache
-   */
   async get(key) {
     if (!redisClient) return null;
     try {
       const data = await redisClient.get(key);
       return data ? JSON.parse(data) : null;
     } catch (error) {
-      logger.error('Redis get error:', error);
+      logger.error('Redis GET error', error);
       return null;
     }
   },
 
-  /**
-   * Set value in cache with TTL (in seconds)
-   */
   async set(key, value, ttl = 3600) {
     if (!redisClient) return false;
     try {
-      const serialized = JSON.stringify(value);
-      await redisClient.setex(key, ttl, serialized);
+      await redisClient.set(key, JSON.stringify(value), 'EX', ttl);
       return true;
     } catch (error) {
-      logger.error('Redis set error:', error);
+      logger.error('Redis SET error', error);
       return false;
     }
   },
 
-  /**
-   * Delete value from cache
-   */
   async del(key) {
     if (!redisClient) return false;
     try {
       await redisClient.del(key);
       return true;
     } catch (error) {
-      logger.error('Redis del error:', error);
+      logger.error('Redis DEL error', error);
       return false;
     }
   },
 
-  /**
-   * Delete multiple keys by pattern
-   */
   async delPattern(pattern) {
     if (!redisClient) return false;
     try {
       const keys = await redisClient.keys(pattern);
-      if (keys.length > 0) {
+      if (keys.length) {
         await redisClient.del(...keys);
       }
       return true;
     } catch (error) {
-      logger.error('Redis delPattern error:', error);
+      logger.error('Redis DEL PATTERN error', error);
       return false;
     }
   },
 
-  /**
-   * Check if key exists
-   */
   async exists(key) {
     if (!redisClient) return false;
     try {
-      const result = await redisClient.exists(key);
-      return result === 1;
+      return (await redisClient.exists(key)) === 1;
     } catch (error) {
-      logger.error('Redis exists error:', error);
+      logger.error('Redis EXISTS error', error);
       return false;
     }
   },
 
-  /**
-   * Set TTL for existing key
-   */
   async expire(key, ttl) {
     if (!redisClient) return false;
     try {
       await redisClient.expire(key, ttl);
       return true;
     } catch (error) {
-      logger.error('Redis expire error:', error);
+      logger.error('Redis EXPIRE error', error);
       return false;
     }
   },
 
-  /**
-   * Increment counter
-   */
   async incr(key) {
     if (!redisClient) return null;
     try {
       return await redisClient.incr(key);
     } catch (error) {
-      logger.error('Redis incr error:', error);
+      logger.error('Redis INCR error', error);
       return null;
     }
   }
 };
 
-// Check Redis health
+/* ------------------------------------------------------------------
+   Health Check
+------------------------------------------------------------------ */
 const checkRedisHealth = async () => {
   try {
     if (!redisClient) {
@@ -175,15 +158,18 @@ const checkRedisHealth = async () => {
   }
 };
 
-// Graceful shutdown
+/* ------------------------------------------------------------------
+   Graceful Shutdown
+------------------------------------------------------------------ */
 const disconnectRedis = async () => {
   if (redisClient) {
     await redisClient.quit();
-    logger.info('Redis connection closed');
+    redisClient = null;
+    logger.info('Redis disconnected');
   }
 };
 
-module.exports = {
+export {
   connectRedis,
   getRedisClient,
   cacheHelpers,
