@@ -1,0 +1,102 @@
+version: '3.8'
+
+# Production Docker Compose Configuration
+# Uses external MongoDB Atlas and Redis Cloud for better reliability
+
+services:
+  # Node.js API Server
+  api-server:
+    build:
+      context: ./backend/api-server
+      dockerfile: ../../Dockerfile.api
+    container_name: synthia-api-prod
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      MONGODB_URI: ${MONGODB_URI}  # MongoDB Atlas connection string
+      REDIS_HOST: ${REDIS_HOST}    # Redis Cloud host
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      AI_SERVICE_URL: http://ai-service:8000
+      CORS_ORIGIN: ${CORS_ORIGIN}
+    volumes:
+      - api_logs:/app/logs
+    networks:
+      - synthia-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # Python AI Service
+  ai-service:
+    build:
+      context: ./backend/ai-service
+      dockerfile: ../../Dockerfile.ai
+    container_name: synthia-ai-prod
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      ENVIRONMENT: production
+      PORT: 8000
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      MONGODB_URI: ${MONGODB_URI}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    volumes:
+      - ai_logs:/app/logs
+    networks:
+      - synthia-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+
+  # React Frontend with Nginx
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../Dockerfile.frontend
+      args:
+        VITE_API_URL: ${API_URL}
+    container_name: synthia-frontend-prod
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - api-server
+    networks:
+      - synthia-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+volumes:
+  api_logs:
+  ai_logs:
+
+networks:
+  synthia-network:
+    driver: bridge
