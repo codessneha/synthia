@@ -9,6 +9,7 @@ import logger from '../utils/logger.js';
  */
 const getPapers = async (req, res, next) => {
   try {
+    console.log('GET /api/v1/papers query:', req.query);
     const {
       page = 1,
       limit = 20,

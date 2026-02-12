@@ -22,6 +22,7 @@ import sessionRoutes from './routes/sessionRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
 import citationRoutes from './routes/citationRoutes.js';
 import userRoutes from './routes/userRoutes.js';
+import searchRoutes from './routes/searchRoutes.js';
 
 /* ------------------------------------------------------------------
    Middleware
@@ -99,6 +100,7 @@ app.use(`${API_PREFIX}/sessions`, sessionRoutes);
 app.use(`${API_PREFIX}/chat`, chatRoutes);
 app.use(`${API_PREFIX}/citations`, citationRoutes);
 app.use(`${API_PREFIX}/users`, userRoutes);
+app.use(`${API_PREFIX}/search`, searchRoutes);
 
 /* ------------------------------------------------------------------
    Error Handling

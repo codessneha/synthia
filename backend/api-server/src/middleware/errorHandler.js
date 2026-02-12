@@ -4,6 +4,14 @@ import logger from '../utils/logger.js';
  * Global error handler middleware
  */
 const errorHandler = (err, req, res, next) => {
+  console.log('--- ERROR START ---');
+  console.log('URL:', req.originalUrl);
+  console.log('Method:', req.method);
+  console.log('Error Name:', err.name);
+  console.log('Error Message:', err.message);
+  if (err.errors) console.log('Validation Errors:', JSON.stringify(err.errors, null, 2));
+  console.log('--- ERROR END ---');
+
   let error = { ...err };
   error.message = err.message;
 

@@ -1,6 +1,6 @@
-const axios = require('axios');
-const xml2js = require('xml2js');
-const logger = require('../utils/logger');
+import axios from 'axios';
+import xml2js from 'xml2js';
+import logger from '../utils/logger.js';
 
 /**
  * Paper Search Service
@@ -343,4 +343,4 @@ class PaperSearchService {
   }
 }
 
-module.exports = new PaperSearchService();
+export default new PaperSearchService();
