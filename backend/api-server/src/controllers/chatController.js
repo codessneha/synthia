@@ -14,9 +14,9 @@ const sendMessage = async (req, res, next) => {
     const { content } = req.body;
 
     // Get session
-    const session = await Session.findOne({ 
-      _id: sessionId, 
-      user: req.user._id 
+    const session = await Session.findOne({
+      _id: sessionId,
+      user: req.user._id
     }).populate('papers.paper');
 
     if (!session) {
@@ -30,33 +30,38 @@ const sendMessage = async (req, res, next) => {
     await session.addMessage('user', content);
 
     // Prepare context for AI
-    const context = {
-      sessionId: session._id,
-      papers: session.papers.map(p => ({
+    // Prepare context for AI
+    const papers = (session.papers || [])
+      .filter(p => p.paper) // Filter out null/deleted papers
+      .map(p => ({
         id: p.paper._id,
         title: p.paper.title,
         authors: p.paper.authors.map(a => a.name).join(', '),
         abstract: p.paper.abstract,
         keywords: p.paper.keywords
-      })),
+      }));
+
+    const context = {
+      sessionId: session._id,
+      papers,
       conversationHistory: session.messages.slice(-10), // Last 10 messages
-      userIntent: session.context.userIntent,
-      settings: session.settings
+      userIntent: session.context?.userIntent || '',
+      settings: session.settings || {}
     };
 
     // Call AI service
     let aiResponse;
     try {
       const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
-      
+
       const response = await axios.post(
         `${aiServiceUrl}/api/v1/chat/completion`,
         {
           message: content,
           context,
-          model: session.settings.aiModel || 'gpt-4',
-          temperature: session.settings.temperature || 0.7,
-          maxTokens: session.settings.maxTokens || 2000
+          model: session.settings?.aiModel || 'llama-3.3-70b-versatile',
+          temperature: session.settings?.temperature || 0.7,
+          maxTokens: session.settings?.maxTokens || 2000
         },
         {
           headers: { 'Content-Type': 'application/json' },
@@ -65,10 +70,13 @@ const sendMessage = async (req, res, next) => {
       );
 
       aiResponse = response.data;
+      logger.info('AI Service Response content type:', typeof aiResponse.content);
+      logger.info('AI Service Response content length:', aiResponse.content?.length);
+      console.log('AI Response:', JSON.stringify(aiResponse, null, 2));
 
     } catch (aiError) {
       logger.error('AI service error:', aiError);
-      
+
       // Fallback response if AI service is unavailable
       aiResponse = {
         content: "I apologize, but I'm having trouble connecting to the AI service right now. Please try again in a moment.",
@@ -84,6 +92,9 @@ const sendMessage = async (req, res, next) => {
     await session.addMessage('assistant', aiResponse.content, aiResponse.metadata);
 
     // Update session context
+    if (!session.context) {
+      session.context = {};
+    }
     if (!session.context.keyTopics) {
       session.context.keyTopics = [];
     }
@@ -124,9 +135,9 @@ const getMessages = async (req, res, next) => {
     const { sessionId } = req.params;
     const { limit = 50, skip = 0 } = req.query;
 
-    const session = await Session.findOne({ 
-      _id: sessionId, 
-      user: req.user._id 
+    const session = await Session.findOne({
+      _id: sessionId,
+      user: req.user._id
     }).select('messages');
 
     if (!session) {
@@ -168,9 +179,9 @@ const clearMessages = async (req, res, next) => {
   try {
     const { sessionId } = req.params;
 
-    const session = await Session.findOne({ 
-      _id: sessionId, 
-      user: req.user._id 
+    const session = await Session.findOne({
+      _id: sessionId,
+      user: req.user._id
     });
 
     if (!session) {
@@ -208,9 +219,9 @@ const analyzePapers = async (req, res, next) => {
     const { sessionId } = req.params;
     const { analysisType = 'compare', focusAreas } = req.body;
 
-    const session = await Session.findOne({ 
-      _id: sessionId, 
-      user: req.user._id 
+    const session = await Session.findOne({
+      _id: sessionId,
+      user: req.user._id
     }).populate('papers.paper');
 
     if (!session) {
@@ -245,7 +256,7 @@ const analyzePapers = async (req, res, next) => {
     // Call AI service for analysis
     try {
       const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
-      
+
       const response = await axios.post(
         `${aiServiceUrl}/api/v1/analysis/compare`,
         analysisData,
@@ -293,9 +304,9 @@ const generateSummary = async (req, res, next) => {
   try {
     const { sessionId } = req.params;
 
-    const session = await Session.findOne({ 
-      _id: sessionId, 
-      user: req.user._id 
+    const session = await Session.findOne({
+      _id: sessionId,
+      user: req.user._id
     });
 
     if (!session) {
@@ -315,7 +326,7 @@ const generateSummary = async (req, res, next) => {
     // Call AI service to generate summary
     try {
       const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
-      
+
       const response = await axios.post(
         `${aiServiceUrl}/api/v1/chat/summarize`,
         {
@@ -363,9 +374,9 @@ const exportTranscript = async (req, res, next) => {
     const { sessionId } = req.params;
     const { format = 'json' } = req.query;
 
-    const session = await Session.findOne({ 
-      _id: sessionId, 
-      user: req.user._id 
+    const session = await Session.findOne({
+      _id: sessionId,
+      user: req.user._id
     }).populate('papers.paper', 'title authors');
 
     if (!session) {
@@ -422,7 +433,7 @@ function generateMarkdownTranscript(session) {
   let markdown = `# ${session.name}\n\n`;
   markdown += `**Created:** ${session.createdAt.toLocaleDateString()}\n`;
   markdown += `**Papers:** ${session.papers.length}\n\n`;
-  
+
   if (session.papers.length > 0) {
     markdown += `## Papers in Session\n\n`;
     session.papers.forEach((p, i) => {
@@ -447,7 +458,7 @@ function generateTextTranscript(session) {
   text += `${'='.repeat(session.name.length)}\n\n`;
   text += `Created: ${session.createdAt.toLocaleDateString()}\n`;
   text += `Papers: ${session.papers.length}\n\n`;
-  
+
   session.messages.forEach(msg => {
     const timestamp = msg.timestamp.toLocaleString();
     const role = msg.role.toUpperCase();

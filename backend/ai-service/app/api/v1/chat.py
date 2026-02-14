@@ -129,7 +129,7 @@ async def summarize_conversation(request: SummarizeRequest):
         # Generate summary
         response = await llm_manager.generate_completion(
             messages=messages,
-            model="gpt-4",
+            model="llama-3.3-70b-versatile",
             temperature=0.5,
             max_tokens=500
         )
@@ -186,7 +186,7 @@ Format as a simple numbered list."""
         
         response = await llm_manager.generate_completion(
             messages=messages,
-            model="gpt-3.5-turbo",
+            model="llama-3.3-70b-versatile",
             temperature=0.8,
             max_tokens=300
         )

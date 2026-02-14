@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     """
     # Environment
     ENVIRONMENT: str = "development"
-    PORT: int = 8000
+    PORT: int = 8001
     LOG_LEVEL: str = "INFO"
     
     # CORS
@@ -19,8 +19,8 @@ class Settings(BaseSettings):
         "http://localhost:5173"
     ]
     
-    # OpenAI Configuration
-    OPENAI_API_KEY: str
+    # OpenAI Configuration (Optional - not used when Groq is configured)
+    OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-4"
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-ada-002"
     OPENAI_MAX_TOKENS: int = 2000
@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: Optional[str] = None
     ANTHROPIC_MODEL: str = "claude-3-sonnet-20240229"
     ANTHROPIC_MAX_TOKENS: int = 2000
+    
+    # Groq Configuration (Primary LLM Provider)
+    GROQ_API_KEY: str
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_MAX_TOKENS: int = 2000
     
     # MongoDB
     MONGODB_URI: str = "mongodb://localhost:27017/synthia-research"

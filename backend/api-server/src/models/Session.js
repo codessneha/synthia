@@ -13,7 +13,7 @@ const sessionSchema = new mongoose.Schema(
       type: String,
       maxlength: [500, 'Description cannot exceed 500 characters']
     },
-    
+
     // Owner
     user: {
       type: mongoose.Schema.Types.ObjectId,
@@ -21,7 +21,7 @@ const sessionSchema = new mongoose.Schema(
       required: true,
       index: true
     },
-    
+
     // Papers in this session
     papers: [{
       paper: {
@@ -41,14 +41,14 @@ const sessionSchema = new mongoose.Schema(
         createdAt: { type: Date, default: Date.now }
       }]
     }],
-    
+
     // Session Type
     sessionType: {
       type: String,
       enum: ['single-paper', 'multi-paper', 'comparative', 'literature-review'],
       default: 'single-paper'
     },
-    
+
     // Chat Messages
     messages: [{
       role: {
@@ -77,7 +77,7 @@ const sessionSchema = new mongoose.Schema(
         }]
       }
     }],
-    
+
     // Session Context (for AI memory)
     context: {
       summary: String, // Summary of conversation so far
@@ -88,13 +88,17 @@ const sessionSchema = new mongoose.Schema(
       }],
       userIntent: String // Research question/goal
     },
-    
+
     // Settings
     settings: {
       aiModel: {
         type: String,
-        enum: ['gpt-4', 'gpt-3.5-turbo', 'claude-3-opus', 'claude-3-sonnet'],
-        default: 'gpt-4'
+        enum: [
+          'gpt-4', 'gpt-3.5-turbo', 'gpt-4o', 'o1-preview',
+          'claude-3-opus', 'claude-3-sonnet', 'claude-3-5-sonnet',
+          'llama-3.3-70b-versatile', 'llama-3.1-70b-versatile', 'mixtral-8x7b-32768'
+        ],
+        default: 'llama-3.3-70b-versatile'
       },
       temperature: {
         type: Number,
@@ -111,7 +115,7 @@ const sessionSchema = new mongoose.Schema(
         default: true
       }
     },
-    
+
     // Collaboration
     sharedWith: [{
       user: {
@@ -132,7 +136,7 @@ const sessionSchema = new mongoose.Schema(
       type: Boolean,
       default: false
     },
-    
+
     // Tags and Organization
     tags: [{
       type: String,
@@ -140,7 +144,7 @@ const sessionSchema = new mongoose.Schema(
       lowercase: true
     }],
     folder: String,
-    
+
     // Status
     status: {
       type: String,
@@ -152,7 +156,7 @@ const sessionSchema = new mongoose.Schema(
       type: Boolean,
       default: false
     },
-    
+
     // Analytics
     stats: {
       messageCount: {
@@ -169,7 +173,7 @@ const sessionSchema = new mongoose.Schema(
         default: 0
       }
     },
-    
+
     // Export History
     exports: [{
       format: {
@@ -197,21 +201,21 @@ sessionSchema.index({ tags: 1 });
 sessionSchema.index({ 'papers.paper': 1 });
 
 // Virtual for paper count
-sessionSchema.virtual('paperCount').get(function() {
-  return this.papers.length;
+sessionSchema.virtual('paperCount').get(function () {
+  return this.papers ? this.papers.length : 0;
 });
 
 // Virtual for message count (alternative to storing in stats)
-sessionSchema.virtual('messageCount').get(function() {
-  return this.messages.length;
+sessionSchema.virtual('messageCount').get(function () {
+  return this.messages ? this.messages.length : 0;
 });
 
 // Pre-save middleware to update stats
-sessionSchema.pre('save', function(next) {
+sessionSchema.pre('save', function (next) {
   if (this.isModified('messages')) {
     this.stats.messageCount = this.messages.length;
     this.stats.lastActivityAt = new Date();
-    
+
     // Calculate total tokens
     this.stats.totalTokensUsed = this.messages.reduce((sum, msg) => {
       return sum + (msg.metadata?.tokens || 0);
@@ -221,7 +225,7 @@ sessionSchema.pre('save', function(next) {
 });
 
 // Method to add a message
-sessionSchema.methods.addMessage = function(role, content, metadata = {}) {
+sessionSchema.methods.addMessage = function (role, content, metadata = {}) {
   this.messages.push({
     role,
     content,
@@ -232,10 +236,10 @@ sessionSchema.methods.addMessage = function(role, content, metadata = {}) {
 };
 
 // Method to add a paper
-sessionSchema.methods.addPaper = function(paperId, notes = '') {
+sessionSchema.methods.addPaper = function (paperId, notes = '') {
   // Check if paper already exists in session
   const exists = this.papers.some(p => p.paper.toString() === paperId.toString());
-  
+
   if (!exists) {
     this.papers.push({
       paper: paperId,
@@ -243,18 +247,18 @@ sessionSchema.methods.addPaper = function(paperId, notes = '') {
       notes
     });
   }
-  
+
   return this.save();
 };
 
 // Method to remove a paper
-sessionSchema.methods.removePaper = function(paperId) {
+sessionSchema.methods.removePaper = function (paperId) {
   this.papers = this.papers.filter(p => p.paper.toString() !== paperId.toString());
   return this.save();
 };
 
 // Static method to get user sessions with filters
-sessionSchema.statics.getUserSessions = function(userId, options = {}) {
+sessionSchema.statics.getUserSessions = function (userId, options = {}) {
   const {
     status = 'active',
     sortBy = '-updatedAt',
@@ -265,11 +269,11 @@ sessionSchema.statics.getUserSessions = function(userId, options = {}) {
   } = options;
 
   const query = { user: userId, status };
-  
+
   if (tags && tags.length > 0) {
     query.tags = { $in: tags };
   }
-  
+
   if (search) {
     query.$or = [
       { name: { $regex: search, $options: 'i' } },
@@ -285,7 +289,7 @@ sessionSchema.statics.getUserSessions = function(userId, options = {}) {
 };
 
 // Static method to get session with full details
-sessionSchema.statics.getSessionDetails = function(sessionId, userId) {
+sessionSchema.statics.getSessionDetails = function (sessionId, userId) {
   return this.findOne({ _id: sessionId, user: userId })
     .populate('papers.paper')
     .populate('sharedWith.user', 'name email profilePicture');

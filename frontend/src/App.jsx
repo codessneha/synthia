@@ -15,36 +15,47 @@ import SessionDetail from './pages/Sessions/SessionDetail';
 import Citations from './pages/Citations/Citations';
 import Profile from './pages/Profile/Profile';
 
+// Components
+import ProtectedRoute from './components/common/ProtectedRoute';
+import ErrorBoundary from './components/common/ErrorBoundary';
+
 // Layout
 import MainLayout from './components/layout/MainLayout';
 
-// Theme
 const theme = createTheme({
     palette: {
         primary: {
-            main: '#1976d2',
-            light: '#42a5f5',
-            dark: '#1565c0',
+            main: '#2563eb', // Indigo 600
+            light: '#60a5fa', // Blue 400
+            dark: '#1d4ed8', // Blue 700
         },
         secondary: {
-            main: '#9c27b0',
-            light: '#ba68c8',
-            dark: '#7b1fa2',
+            main: '#7c3aed', // Violet 600
+            light: '#a78bfa', // Violet 400
+            dark: '#5b21b6', // Violet 700
         },
         background: {
-            default: '#f5f5f5',
+            default: '#f8fafc', // Slate 50
             paper: '#ffffff',
         },
+        text: {
+            primary: '#1e293b', // Slate 800
+            secondary: '#64748b', // Slate 500
+        },
+    },
+    shape: {
+        borderRadius: 12,
     },
     typography: {
         fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
-        h1: {
+        h4: {
             fontWeight: 700,
         },
-        h2: {
+        h6: {
             fontWeight: 600,
         },
-        h3: {
+        button: {
+            textTransform: 'none',
             fontWeight: 600,
         },
     },
@@ -52,114 +63,123 @@ const theme = createTheme({
         MuiButton: {
             styleOverrides: {
                 root: {
-                    textTransform: 'none',
                     borderRadius: 8,
+                    padding: '8px 16px',
+                },
+                contained: {
+                    boxShadow: 'none',
+                    '&:hover': {
+                        boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+                    },
+                },
+            },
+        },
+        MuiPaper: {
+            styleOverrides: {
+                root: {
+                    boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)',
                 },
             },
         },
         MuiCard: {
             styleOverrides: {
                 root: {
-                    borderRadius: 12,
+                    boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)',
+                    '&:hover': {
+                        boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
+                    },
+                    transition: 'box-shadow 0.3s ease-in-out',
                 },
             },
         },
     },
 });
 
-// Protected Route Component
-function ProtectedRoute({ children }) {
-    const { user, loading } = useAuth();
-
-    if (loading) {
-        return <div>Loading...</div>;
-    }
-
-    if (!user) {
-        return <Navigate to="/login" replace />;
-    }
-
-    return children;
-}
-
 function App() {
     return (
         <ThemeProvider theme={theme}>
             <CssBaseline />
             <AuthProvider>
-                <BrowserRouter>
-                    <Routes>
-                        {/* Public Routes */}
-                        <Route path="/" element={<LandingPage />} />
-                        <Route path="/login" element={<Login />} />
-                        <Route path="/register" element={<Register />} />
+                <ErrorBoundary>
+                    <BrowserRouter
+                        future={{
+                            v7_startTransition: true,
+                            v7_relativeSplatPath: true,
+                        }}
+                    >
+                        <Routes>
+                            {/* Public Routes */}
+                            <Route path="/" element={<LandingPage />} />
+                            <Route path="/login" element={<Login />} />
+                            <Route path="/register" element={<Register />} />
 
-                        {/* Protected Routes */}
-                        <Route
-                            path="/dashboard"
-                            element={
-                                <ProtectedRoute>
-                                    <MainLayout>
-                                        <Dashboard />
-                                    </MainLayout>
-                                </ProtectedRoute>
-                            }
-                        />
-                        <Route
-                            path="/papers"
-                            element={
-                                <ProtectedRoute>
-                                    <MainLayout>
-                                        <Papers />
-                                    </MainLayout>
-                                </ProtectedRoute>
-                            }
-                        />
-                        <Route
-                            path="/sessions"
-                            element={
-                                <ProtectedRoute>
-                                    <MainLayout>
-                                        <Sessions />
-                                    </MainLayout>
-                                </ProtectedRoute>
-                            }
-                        />
-                        <Route
-                            path="/sessions/:id"
-                            element={
-                                <ProtectedRoute>
-                                    <MainLayout>
-                                        <SessionDetail />
-                                    </MainLayout>
-                                </ProtectedRoute>
-                            }
-                        />
-                        <Route
-                            path="/citations"
-                            element={
-                                <ProtectedRoute>
-                                    <MainLayout>
-                                        <Citations />
-                                    </MainLayout>
-                                </ProtectedRoute>
-                            }
-                        />
-                        <Route
-                            path="/profile"
-                            element={
-                                <ProtectedRoute>
-                                    <MainLayout>
-                                        <Profile />
-                                    </MainLayout>
-                                </ProtectedRoute>
-                            }
-                        />
+                            {/* Protected Routes */}
+                            <Route
+                                path="/dashboard"
+                                element={
+                                    <ProtectedRoute>
+                                        <MainLayout>
+                                            <Dashboard />
+                                        </MainLayout>
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/papers"
+                                element={
+                                    <ProtectedRoute>
+                                        <MainLayout>
+                                            <Papers />
+                                        </MainLayout>
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/sessions"
+                                element={
+                                    <ProtectedRoute>
+                                        <MainLayout>
+                                            <Sessions />
+                                        </MainLayout>
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/sessions/:id"
+                                element={
+                                    <ProtectedRoute>
+                                        <MainLayout>
+                                            <SessionDetail />
+                                        </MainLayout>
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/citations"
+                                element={
+                                    <ProtectedRoute>
+                                        <MainLayout>
+                                            <Citations />
+                                        </MainLayout>
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/profile"
+                                element={
+                                    <ProtectedRoute>
+                                        <MainLayout>
+                                            <Profile />
+                                        </MainLayout>
+                                    </ProtectedRoute>
+                                }
+                            />
 
-                        {/* 404 */}
-                        <Route path="*" element={<Navigate to="/" replace />} />
-                    </Routes>
-                </BrowserRouter>
+                            {/* 404 */}
+                            <Route path="*" element={<Navigate to="/" replace />} />
+                        </Routes>
+                    </BrowserRouter>
+                </ErrorBoundary>
 
                 {/* Toast Notifications */}
                 <Toaster

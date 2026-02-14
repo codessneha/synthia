@@ -27,7 +27,13 @@ import {
 } from '@mui/icons-material';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
-import ReactMarkdown from 'react-markdown';
+
+// Components
+import ChatMessage from '../../components/chat/ChatMessage';
+import ChatInput from '../../components/chat/ChatInput';
+import PaperCard from '../../components/papers/PaperCard';
+import PaperDetailsDialog from '../../components/papers/PaperDetailsDialog';
+import LoadingSpinner from '../../components/common/LoadingSpinner';
 
 export default function SessionDetail() {
   const { id } = useParams();
@@ -36,10 +42,10 @@ export default function SessionDetail() {
 
   const [session, setSession] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selectedPaper, setSelectedPaper] = useState(null);
 
   useEffect(() => {
     fetchSession();
@@ -69,113 +75,43 @@ export default function SessionDetail() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const handleSendMessage = async () => {
-    if (!newMessage.trim()) return;
-
-    const messageContent = newMessage;
-    setNewMessage('');
+  const handleSendMessage = async (content) => {
     setSending(true);
 
     // Add user message immediately
     const userMessage = {
+      _id: 'temp-' + Date.now(),
       role: 'user',
-      content: messageContent,
+      content: content,
       timestamp: new Date(),
     };
     setMessages(prev => [...prev, userMessage]);
 
     try {
       const response = await api.post(`/chat/${id}/message`, {
-        content: messageContent,
+        content: content,
       });
 
       // Add AI response
       const aiMessage = response.data.data.message;
       setMessages(prev => [...prev, aiMessage]);
+
+      // Update session stats/context in background if needed
+      // (The new message is already in state, so we don't strictly need fetchSession immediately for the chat UI)
+      // fetchSession(); 
     } catch (error) {
       console.error('Send message error:', error);
       toast.error('Failed to send message');
-      // Remove user message on error
-      setMessages(prev => prev.slice(0, -1));
+      // Remove the temporary user message on error
+      setMessages(prev => prev.filter(m => m._id !== userMessage._id));
     } finally {
       setSending(false);
     }
   };
 
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
-
-  const MessageBubble = ({ message }) => {
-    const isUser = message.role === 'user';
-    const isSystem = message.role === 'system';
-
-    if (isSystem) {
-      return (
-        <Box sx={{ textAlign: 'center', my: 2 }}>
-          <Chip label={message.content} size="small" />
-        </Box>
-      );
-    }
-
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: isUser ? 'flex-end' : 'flex-start',
-          mb: 2,
-        }}
-      >
-        {!isUser && (
-          <Avatar sx={{ bgcolor: 'primary.main', mr: 1 }}>
-            <SmartToy />
-          </Avatar>
-        )}
-
-        <Paper
-          sx={{
-            p: 2,
-            maxWidth: '70%',
-            bgcolor: isUser ? 'primary.main' : 'grey.100',
-            color: isUser ? 'white' : 'text.primary',
-          }}
-        >
-          {isUser ? (
-            <Typography variant="body1">{message.content}</Typography>
-          ) : (
-            <ReactMarkdown>{message.content}</ReactMarkdown>
-          )}
-          <Typography
-            variant="caption"
-            sx={{
-              display: 'block',
-              mt: 1,
-              opacity: 0.7,
-              fontSize: '0.7rem',
-            }}
-          >
-            {new Date(message.timestamp).toLocaleTimeString()}
-          </Typography>
-        </Paper>
-
-        {isUser && (
-          <Avatar sx={{ bgcolor: 'secondary.main', ml: 1 }}>
-            <Person />
-          </Avatar>
-        )}
-      </Box>
-    );
-  };
 
   if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <CircularProgress />
-      </Box>
-    );
+    return <LoadingSpinner fullScreen message="Loading session details..." />;
   }
 
   if (!session) {
@@ -230,7 +166,10 @@ export default function SessionDetail() {
           ) : (
             <>
               {messages.map((message, index) => (
-                <MessageBubble key={index} message={message} />
+                <ChatMessage
+                  key={message._id || index}
+                  message={message}
+                />
               ))}
               <div ref={messagesEndRef} />
             </>
@@ -252,31 +191,13 @@ export default function SessionDetail() {
         </Box>
 
         {/* Input Area */}
-        <Paper sx={{ p: 2, borderRadius: 0 }}>
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <TextField
-              fullWidth
-              multiline
-              maxRows={4}
-              placeholder="Type your message..."
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
-              disabled={sending}
-            />
-            <IconButton
-              color="primary"
-              onClick={handleSendMessage}
-              disabled={!newMessage.trim() || sending}
-              sx={{ bgcolor: 'primary.main', color: 'white', '&:hover': { bgcolor: 'primary.dark' } }}
-            >
-              <Send />
-            </IconButton>
-          </Box>
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-            Press Enter to send, Shift+Enter for new line
-          </Typography>
-        </Paper>
+        <Box sx={{ p: 2 }}>
+          <ChatInput
+            onSend={handleSendMessage}
+            disabled={sending}
+            placeholder="Ask a question about your research..."
+          />
+        </Box>
       </Box>
 
       {/* Info Drawer */}
@@ -302,29 +223,22 @@ export default function SessionDetail() {
           <Typography variant="subtitle2" color="text.secondary" gutterBottom>
             Papers in Session
           </Typography>
-          <List>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {session.papers && session.papers.length > 0 ? (
               session.papers.map((item) => (
-                <ListItem key={item._id || item.paper?._id} sx={{ px: 0 }}>
-                  <Description sx={{ mr: 1, color: 'primary.main' }} />
-                  <ListItemText
-                    primary={
-                      <Typography variant="body2" fontWeight={500}>
-                        {item.paper?.title || item.title || 'Untitled'}
-                      </Typography>
-                    }
-                    secondary={
-                      item.paper?.authors?.slice(0, 2).map(a => a.name).join(', ')
-                    }
-                  />
-                </ListItem>
+                <PaperCard
+                  key={item._id || item.paper?._id}
+                  paper={item.paper || item}
+                  variant="compact"
+                  onView={(p) => setSelectedPaper(p)}
+                />
               ))
             ) : (
               <Typography variant="body2" color="text.secondary">
                 No papers added yet
               </Typography>
             )}
-          </List>
+          </Box>
 
           {session.tags && session.tags.length > 0 && (
             <>
@@ -356,6 +270,13 @@ export default function SessionDetail() {
           </Typography>
         </Box>
       </Drawer>
+
+      {/* Paper Details Dialog */}
+      <PaperDetailsDialog
+        open={Boolean(selectedPaper)}
+        onClose={() => setSelectedPaper(null)}
+        paper={selectedPaper}
+      />
     </Box>
   );
 }

@@ -29,6 +29,14 @@ import { useAuth } from '../../hooks/useAuth';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 
+// Components
+import StatsCard from '../../components/common/StatsCard';
+import LoadingSpinner from '../../components/common/LoadingSpinner';
+import PaperCard from '../../components/papers/PaperCard';
+import SessionCard from '../../components/sessions/SessionCard';
+import NotificationBadge from '../../components/common/NotificationBadge';
+import PaperDetailsDialog from '../../components/papers/PaperDetailsDialog';
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -41,6 +49,7 @@ export default function Dashboard() {
   });
   const [recentSessions, setRecentSessions] = useState([]);
   const [recentPapers, setRecentPapers] = useState([]);
+  const [selectedPaper, setSelectedPaper] = useState(null);
 
   useEffect(() => {
     fetchDashboardData();
@@ -83,46 +92,9 @@ export default function Dashboard() {
     }
   };
 
-  const StatCard = ({ title, value, icon: Icon, color, onClick }) => (
-    <Card 
-      sx={{ 
-        height: '100%',
-        cursor: onClick ? 'pointer' : 'default',
-        '&:hover': onClick ? { boxShadow: 4 } : {},
-        transition: 'box-shadow 0.3s',
-      }}
-      onClick={onClick}
-    >
-      <CardContent>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <Box>
-            <Typography color="text.secondary" variant="body2" gutterBottom>
-              {title}
-            </Typography>
-            <Typography variant="h4" fontWeight={700}>
-              {value}
-            </Typography>
-          </Box>
-          <Box
-            sx={{
-              backgroundColor: `${color}15`,
-              borderRadius: 2,
-              p: 1.5,
-            }}
-          >
-            <Icon sx={{ color, fontSize: 32 }} />
-          </Box>
-        </Box>
-      </CardContent>
-    </Card>
-  );
 
   if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <CircularProgress />
-      </Box>
-    );
+    return <LoadingSpinner fullScreen message="Preparing your dashboard..." />;
   }
 
   return (
@@ -140,16 +112,17 @@ export default function Dashboard() {
       {/* Stats Grid */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
-          <StatCard
+          <StatsCard
             title="Total Papers"
             value={stats.totalPapers}
             icon={Description}
             color="#1976d2"
             onClick={() => navigate('/papers')}
+            trend="+12%"
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <StatCard
+          <StatsCard
             title="Research Sessions"
             value={stats.totalSessions}
             icon={Chat}
@@ -158,16 +131,16 @@ export default function Dashboard() {
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <StatCard
-            title="Active Sessions"
+          <StatsCard
+            title="Active Today"
             value={stats.activeSessions}
             icon={TrendingUp}
             color="#2e7d32"
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <StatCard
-            title="Citations"
+          <StatsCard
+            title="Total Citations"
             value={stats.totalCitations}
             icon={FormatQuote}
             color="#ed6c02"
@@ -259,31 +232,15 @@ export default function Dashboard() {
                 </Button>
               </Box>
             ) : (
-              <List>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {recentSessions.map((session) => (
-                  <ListItem
+                  <SessionCard
                     key={session._id}
-                    button
-                    onClick={() => navigate(`/sessions/${session._id}`)}
-                    sx={{
-                      border: 1,
-                      borderColor: 'divider',
-                      borderRadius: 2,
-                      mb: 1,
-                      '&:hover': { backgroundColor: 'action.hover' },
-                    }}
-                  >
-                    <ListItemIcon>
-                      <Chat color="primary" />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={session.name}
-                      secondary={`${session.paperCount || 0} papers • Updated ${new Date(session.updatedAt).toLocaleDateString()}`}
-                    />
-                    {session.isPinned && <Chip label="Pinned" size="small" color="primary" />}
-                  </ListItem>
+                    session={session}
+                    variant="compact"
+                  />
                 ))}
-              </List>
+              </Box>
             )}
           </Paper>
         </Grid>
@@ -316,45 +273,27 @@ export default function Dashboard() {
                 </Button>
               </Box>
             ) : (
-              <List>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {recentPapers.map((paper) => (
-                  <ListItem
+                  <PaperCard
                     key={paper._id}
-                    button
-                    sx={{
-                      border: 1,
-                      borderColor: 'divider',
-                      borderRadius: 2,
-                      mb: 1,
-                      '&:hover': { backgroundColor: 'action.hover' },
-                    }}
-                  >
-                    <ListItemIcon>
-                      <Description color="primary" />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={
-                        <Typography variant="body2" fontWeight={500}>
-                          {paper.title}
-                        </Typography>
-                      }
-                      secondary={
-                        <>
-                          {paper.authors?.slice(0, 2).map(a => a.name).join(', ')}
-                          {paper.authors?.length > 2 && ' et al.'}
-                          {' • '}
-                          {paper.publicationDate ? new Date(paper.publicationDate).getFullYear() : 'N/A'}
-                        </>
-                      }
-                    />
-                    <Chip label={paper.source} size="small" />
-                  </ListItem>
+                    paper={paper}
+                    variant="compact"
+                    onView={(p) => setSelectedPaper(p)}
+                  />
                 ))}
-              </List>
+              </Box>
             )}
           </Paper>
         </Grid>
       </Grid>
+
+      {/* Paper Details Dialog */}
+      <PaperDetailsDialog
+        open={Boolean(selectedPaper)}
+        onClose={() => setSelectedPaper(null)}
+        paper={selectedPaper}
+      />
     </Container>
   );
 }

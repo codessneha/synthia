@@ -37,18 +37,16 @@ async def lifespan(app: FastAPI):
     # Download spaCy model if needed
     # In the lifespan function, replace the spaCy section with:
 
-    # Download spaCy model if needed
+    # Download spaCy model if needed (optional - silently skip if not available)
     try:
         import spacy
         try:
             nlp = spacy.load("en_core_web_sm")
             logger.info("✅ spaCy model loaded")
         except OSError:
-            logger.warning("⚠️ spaCy model not found. NLP features will be limited.")
-            logger.warning("To enable: pip install spacy && python -m spacy download en_core_web_sm")
+            pass  # Silently skip if model not found
     except ImportError:
-        logger.warning("⚠️ spaCy not installed. NLP features will be limited.")
-        logger.info("To install: pip install spacy")
+        pass  # Silently skip if spaCy not installed
     
     # Shutdown
     yield
@@ -144,4 +142,6 @@ if __name__ == "__main__":
         port=settings.PORT,
         reload=settings.ENVIRONMENT == "development",
         log_level=settings.LOG_LEVEL.lower()
+
+# Service restarted to pick up config changes
     )

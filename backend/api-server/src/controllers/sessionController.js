@@ -141,7 +141,7 @@ const createSession = async (req, res, next) => {
       name,
       description,
       user: req.user._id,
-      papers: papers || [],
+      papers: papers ? papers.map(p => ({ paper: p.paper || p })) : [],
       tags: tags || [],
       sessionType: type || 'single-paper',
       settings: settings || {},
@@ -439,7 +439,7 @@ const getSessionStats = async (req, res, next) => {
       user: userId,
       status: 'active'
     })
-      .select('name paperCount stats.lastActivityAt')
+      .select('name papers messages stats.lastActivityAt')
       .sort('-stats.lastActivityAt')
       .limit(5);
 

@@ -36,6 +36,12 @@ import {
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 
+// Components
+import SessionCard from '../../components/sessions/SessionCard';
+import LoadingSpinner from '../../components/common/LoadingSpinner';
+import EmptyState from '../../components/common/EmptyState';
+import ConfirmDialog from '../../components/common/ConfirmDialog';
+
 export default function Sessions() {
   const navigate = useNavigate();
   const [sessions, setSessions] = useState([]);
@@ -48,6 +54,8 @@ export default function Sessions() {
     papers: [],
     tags: [],
   });
+
+  const [deleteId, setDeleteId] = useState(null);
 
   useEffect(() => {
     fetchSessions();
@@ -97,7 +105,7 @@ export default function Sessions() {
       setCreateDialogOpen(false);
       setFormData({ name: '', description: '', papers: [], tags: [] });
       setSessions([response.data.data.session, ...sessions]);
-      
+
       // Navigate to the new session
       navigate(`/sessions/${response.data.data.session._id}`);
     } catch (error) {
@@ -106,15 +114,14 @@ export default function Sessions() {
     }
   };
 
-  const handleDeleteSession = async (sessionId) => {
-    if (!window.confirm('Are you sure you want to delete this session?')) {
-      return;
-    }
+  const handleDeleteSession = async () => {
+    if (!deleteId) return;
 
     try {
-      await api.delete(`/sessions/${sessionId}`);
+      await api.delete(`/sessions/${deleteId}`);
       toast.success('Session deleted');
-      setSessions(sessions.filter(s => s._id !== sessionId));
+      setSessions(sessions.filter(s => s._id !== deleteId));
+      setDeleteId(null);
     } catch (error) {
       toast.error('Failed to delete session');
     }
@@ -123,7 +130,7 @@ export default function Sessions() {
   const handlePinSession = async (sessionId, isPinned) => {
     try {
       await api.put(`/sessions/${sessionId}`, { isPinned: !isPinned });
-      setSessions(sessions.map(s => 
+      setSessions(sessions.map(s =>
         s._id === sessionId ? { ...s, isPinned: !isPinned } : s
       ));
       toast.success(isPinned ? 'Unpinned' : 'Pinned');
@@ -132,117 +139,6 @@ export default function Sessions() {
     }
   };
 
-  const SessionCard = ({ session }) => {
-    const [anchorEl, setAnchorEl] = useState(null);
-
-    const handleMenuOpen = (event) => {
-      event.stopPropagation();
-      setAnchorEl(event.currentTarget);
-    };
-
-    const handleMenuClose = () => {
-      setAnchorEl(null);
-    };
-
-    const paperCount = session.papers?.length || session.paperCount || 0;
-    const messageCount = session.messages?.length || session.stats?.messageCount || 0;
-    const lastActivity = session.stats?.lastActivityAt || session.updatedAt;
-
-    return (
-      <Card 
-        sx={{ 
-          height: '100%',
-          cursor: 'pointer',
-          '&:hover': { boxShadow: 4 },
-          transition: 'box-shadow 0.3s',
-        }}
-        onClick={() => navigate(`/sessions/${session._id}`)}
-      >
-        <CardContent>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-            <Box sx={{ flexGrow: 1 }}>
-              <Typography variant="h6" fontWeight={600} gutterBottom>
-                {session.name}
-              </Typography>
-              {session.description && (
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                  {session.description}
-                </Typography>
-              )}
-            </Box>
-            <IconButton 
-              size="small" 
-              onClick={handleMenuOpen}
-              sx={{ ml: 1 }}
-            >
-              <MoreVert />
-            </IconButton>
-          </Box>
-
-          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
-            <Chip 
-              icon={<Article />} 
-              label={`${paperCount} paper${paperCount !== 1 ? 's' : ''}`} 
-              size="small" 
-            />
-            <Chip 
-              icon={<Chat />} 
-              label={`${messageCount} message${messageCount !== 1 ? 's' : ''}`} 
-              size="small" 
-            />
-            {session.isPinned && (
-              <Chip 
-                icon={<PushPin />} 
-                label="Pinned" 
-                size="small" 
-                color="primary" 
-              />
-            )}
-          </Box>
-
-          {session.tags && session.tags.length > 0 && (
-            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 2 }}>
-              {session.tags.slice(0, 3).map((tag, idx) => (
-                <Chip key={idx} label={tag} size="small" variant="outlined" />
-              ))}
-            </Box>
-          )}
-
-          <Typography variant="caption" color="text.secondary">
-            Updated {new Date(lastActivity).toLocaleDateString()}
-          </Typography>
-        </CardContent>
-
-        <Menu
-          anchorEl={anchorEl}
-          open={Boolean(anchorEl)}
-          onClose={handleMenuClose}
-        >
-          <MenuItem onClick={() => {
-            navigate(`/sessions/${session._id}`);
-            handleMenuClose();
-          }}>
-            <Chat sx={{ mr: 1 }} fontSize="small" />
-            Open Session
-          </MenuItem>
-          <MenuItem onClick={() => {
-            handlePinSession(session._id, session.isPinned);
-            handleMenuClose();
-          }}>
-            <PushPin sx={{ mr: 1 }} fontSize="small" />
-            {session.isPinned ? 'Unpin' : 'Pin'}
-          </MenuItem>
-          <MenuItem onClick={() => {
-            handleDeleteSession(session._id);
-            handleMenuClose();
-          }}>
-            <Delete sx={{ mr: 1 }} fontSize="small" />
-            Delete
-          </MenuItem>
-        </Menu>
-      </Card>
-    );
-  };
 
   // Sort sessions: pinned first, then by date
   const sortedSessions = [...sessions].sort((a, b) => {
@@ -275,31 +171,24 @@ export default function Sessions() {
 
       {/* Sessions Grid */}
       {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-          <CircularProgress />
-        </Box>
+        <LoadingSpinner message="Loading sessions..." />
       ) : sessions.length === 0 ? (
-        <Box sx={{ textAlign: 'center', py: 8 }}>
-          <Chat sx={{ fontSize: 80, color: 'text.disabled', mb: 2 }} />
-          <Typography variant="h6" color="text.secondary" gutterBottom>
-            No sessions yet
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Create your first research session to start chatting with AI about papers
-          </Typography>
-          <Button
-            variant="contained"
-            startIcon={<Add />}
-            onClick={() => setCreateDialogOpen(true)}
-          >
-            Create Session
-          </Button>
-        </Box>
+        <EmptyState
+          icon={Chat}
+          title="No sessions yet"
+          description="Create your first research session to start chatting with AI about papers"
+          actionLabel="Create Session"
+          onAction={() => setCreateDialogOpen(true)}
+        />
       ) : (
         <Grid container spacing={3}>
           {sortedSessions.map((session) => (
             <Grid item xs={12} md={6} lg={4} key={session._id}>
-              <SessionCard session={session} />
+              <SessionCard
+                session={session}
+                onPin={handlePinSession}
+                onDelete={(id) => setDeleteId(id)}
+              />
             </Grid>
           ))}
         </Grid>
@@ -350,13 +239,17 @@ export default function Sessions() {
               />
             )}
             renderTags={(value, getTagProps) =>
-              value.map((option, index) => (
-                <Chip
-                  label={option.title.substring(0, 30) + (option.title.length > 30 ? '...' : '')}
-                  {...getTagProps({ index })}
-                  size="small"
-                />
-              ))
+              value.map((option, index) => {
+                const { key, ...tagProps } = getTagProps({ index });
+                return (
+                  <Chip
+                    key={key}
+                    label={option.title.substring(0, 30) + (option.title.length > 30 ? '...' : '')}
+                    {...tagProps}
+                    size="small"
+                  />
+                );
+              })
             }
           />
 
@@ -383,6 +276,16 @@ export default function Sessions() {
           </Button>
         </DialogActions>
       </Dialog>
+      {/* Confirm Delete Dialog */}
+      <ConfirmDialog
+        open={Boolean(deleteId)}
+        onClose={() => setDeleteId(null)}
+        onConfirm={handleDeleteSession}
+        title="Delete Session"
+        message="Are you sure you want to delete this session? This action cannot be undone."
+        confirmText="Delete"
+        severity="error"
+      />
     </Container>
   );
 }
