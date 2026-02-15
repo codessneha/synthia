@@ -29,8 +29,10 @@ import {
   Logout,
   Science,
   ChevronLeft,
+  RateReview
 } from '@mui/icons-material';
 import { useAuth } from '../../hooks/useAuth';
+import { FactCheck } from '@mui/icons-material';
 
 const drawerWidth = 260;
 
@@ -39,6 +41,8 @@ const menuItems = [
   { text: 'Papers', icon: Description, path: '/papers' },
   { text: 'Sessions', icon: Chat, path: '/sessions' },
   { text: 'Citations', icon: FormatQuote, path: '/citations' },
+  { text: 'Plagiarism Checker', icon: FactCheck, path: '/plagiarism' },
+  { text: 'Paper Review', icon: RateReview, path: '/paper-review' },
 ];
 
 export default function MainLayout({ children }) {

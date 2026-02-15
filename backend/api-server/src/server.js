@@ -23,7 +23,8 @@ import chatRoutes from './routes/chatRoutes.js';
 import citationRoutes from './routes/citationRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import searchRoutes from './routes/searchRoutes.js';
-
+import plagiarismRoutes from './routes/plagiarismRoutes.js';
+import paperReviewRoutes from './routes/paperReviewRoutes.js';
 /* ------------------------------------------------------------------
    Middleware
 ------------------------------------------------------------------ */
@@ -101,6 +102,8 @@ app.use(`${API_PREFIX}/chat`, chatRoutes);
 app.use(`${API_PREFIX}/citations`, citationRoutes);
 app.use(`${API_PREFIX}/users`, userRoutes);
 app.use(`${API_PREFIX}/search`, searchRoutes);
+app.use(`${API_PREFIX}/plagiarism`, plagiarismRoutes);
+app.use(`${API_PREFIX}/paper-review`, paperReviewRoutes);
 
 /* ------------------------------------------------------------------
    Error Handling

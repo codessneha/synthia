@@ -14,6 +14,8 @@ import Sessions from './pages/Sessions/Sessions';
 import SessionDetail from './pages/Sessions/SessionDetail';
 import Citations from './pages/Citations/Citations';
 import Profile from './pages/Profile/Profile';
+import PlagiarismChecker from './pages/Plagiarism/PlagiarismChecker';
+import PaperReview from './pages/PaperReview/PaperReviewSubmission';
 
 // Components
 import ProtectedRoute from './components/common/ProtectedRoute';
@@ -114,6 +116,26 @@ function App() {
                             <Route path="/register" element={<Register />} />
 
                             {/* Protected Routes */}
+                            <Route
+                                path="/plagiarism"
+                                element={
+                                    <ProtectedRoute>
+                                        <MainLayout>
+                                            <PlagiarismChecker />
+                                        </MainLayout>
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/paper-review"
+                                element={
+                                    <ProtectedRoute>
+                                        <MainLayout>
+                                            <PaperReviewSubmission />
+                                        </MainLayout>
+                                    </ProtectedRoute>
+                                }
+                            />
                             <Route
                                 path="/dashboard"
                                 element={

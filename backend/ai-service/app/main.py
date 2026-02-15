@@ -3,10 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from loguru import logger
-import sys
-
-from app.core.config import settings
-from app.api.v1 import chat, analysis, embeddings, citations
+from app.api.v1 import chat, analysis, embeddings, citations, writing
 
 # Configure logger
 logger.remove()
@@ -102,6 +99,7 @@ app.include_router(chat.router, prefix="/api/v1/chat", tags=["Chat"])
 app.include_router(analysis.router, prefix="/api/v1/analysis", tags=["Analysis"])
 app.include_router(embeddings.router, prefix="/api/v1/embeddings", tags=["Embeddings"])
 app.include_router(citations.router, prefix="/api/v1/citations", tags=["Citations"])
+app.include_router(writing.router,prefix="/api/v1/ai",tags=["writing"])
 
 # Global exception handler
 @app.exception_handler(Exception)
