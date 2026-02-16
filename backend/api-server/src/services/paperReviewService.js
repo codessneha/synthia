@@ -1,12 +1,16 @@
 import axios from 'axios';
-import PaperReview from '../models/PaperReview';
-import fs from 'fs';
-import pdf from 'pdf-parse';
+import PaperReview from '../models/PaperReview.js';
+import fs from 'fs/promises';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const pdf = require('pdf-parse');
 import mammoth from 'mammoth';
 
 class PaperReviewService {
   constructor() {
-    this.aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+    this.aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8001';
+    // Prefer API_URL or API_SERVER_URL from .env
+    this.apiServerUrl = process.env.API_URL || process.env.API_SERVER_URL || 'http://localhost:3000';
   }
 
   /**
@@ -18,7 +22,12 @@ class PaperReviewService {
     // Extract text from file if provided
     let extractedText = null;
     if (filePath) {
-      extractedText = await this.extractTextFromFile(filePath);
+      try {
+        extractedText = await this.extractTextFromFile(filePath);
+      } catch (error) {
+        console.error(`Text extraction failed for ${filePath}:`, error);
+        extractedText = '';
+      }
     }
 
     // Create review record
@@ -40,56 +49,74 @@ class PaperReviewService {
    * Extract text from uploaded file
    */
   async extractTextFromFile(filePath) {
-    const buffer = await fs.readFile(filePath);
-    const ext = filePath.split('.').pop().toLowerCase();
+    try {
+      const buffer = await fs.readFile(filePath);
+      const ext = filePath.split('.').pop().toLowerCase();
 
-    if (ext === 'pdf') {
-      const data = await pdf(buffer);
-      return data.text;
-    } else if (ext === 'docx') {
-      const result = await mammoth.extractRawText({ buffer });
-      return result.value;
-    } else if (ext === 'txt') {
-      return buffer.toString('utf-8');
+      if (ext === 'pdf') {
+        const data = await pdf(buffer);
+        return data.text || '';
+      } else if (ext === 'docx') {
+        const result = await mammoth.extractRawText({ buffer });
+        return result.value || '';
+      } else if (ext === 'txt') {
+        return buffer.toString('utf-8');
+      }
+
+      throw new Error(`Unsupported file format: .${ext}`);
+    } catch (error) {
+      console.error(`Error in extractTextFromFile for ${filePath}:`, error);
+      throw error;
     }
-
-    throw new Error('Unsupported file format');
   }
 
   /**
    * Parse sections from raw text
    */
   parseSectionsFromText(text) {
+    if (!text || typeof text !== 'string') {
+      return [];
+    }
+
     const sections = [];
     const sectionHeaders = [
-      'abstract',
-      'introduction',
-      'literature review',
-      'methodology',
-      'results',
-      'discussion',
-      'conclusion',
-      'references'
+      { key: 'abstract', regex: /^(abstract|summary)$/i },
+      { key: 'introduction', regex: /^(introduction|background)$/i },
+      { key: 'literature_review', regex: /^(literature review|related work|background)$/i },
+      { key: 'methodology', regex: /^(methodology|methods|experimental setup|materials and methods)$/i },
+      { key: 'results', regex: /^(results|findings)$/i },
+      { key: 'discussion', regex: /^(discussion|interpretation)$/i },
+      { key: 'conclusion', regex: /^(conclusion|limitations|future work)$/i },
+      { key: 'references', regex: /^(references|bibliography|works cited)$/i }
     ];
 
-    // Simple section detection (can be improved)
     const lines = text.split('\n');
     let currentSection = null;
     let currentContent = [];
 
-    for (const line of lines) {
-      const lowerLine = line.toLowerCase().trim();
-      const matchedHeader = sectionHeaders.find(h => lowerLine.includes(h));
+    // Header regex pattern: Optional numbers/bullets + header text + optional colon/period
+    // Example: "1. Introduction", "Section 2: Methodology", "ABSTRACT"
+    const isHeader = (line) => {
+      const cleanLine = line.trim().replace(/^(\d+\.?\s*|Section\s+\d+:?\s*|[•\-\*]\s*)/i, '').trim().toLowerCase();
+      if (!cleanLine) return null;
 
-      if (matchedHeader) {
-        // Save previous section
-        if (currentSection) {
+      const match = sectionHeaders.find(h => h.regex.test(cleanLine));
+      return match ? match.key : null;
+    };
+
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      const matchedKey = isHeader(trimmedLine);
+
+      if (matchedKey && trimmedLine.length < 100) { // Headers are usually short
+        // Save previous section if it has content
+        if (currentSection && currentContent.length > 0) {
           sections.push({
             type: currentSection,
             content: currentContent.join('\n').trim()
           });
         }
-        currentSection = matchedHeader.replace(' ', '_');
+        currentSection = matchedKey;
         currentContent = [];
       } else if (currentSection) {
         currentContent.push(line);
@@ -112,7 +139,7 @@ class PaperReviewService {
    */
   async performComprehensiveReview(reviewId, userId, analysisTypes = []) {
     const review = await PaperReview.findOne({ _id: reviewId, userId });
-    
+
     if (!review) {
       throw new Error('Review not found');
     }
@@ -146,51 +173,83 @@ class PaperReviewService {
     const fullText = this.combineContent(review);
 
     // Perform each analysis type
-    if (typesToAnalyze.includes('structure')) {
-      analysis.structure = await this.analyzeStructure(review.sections);
-    }
-
-    if (typesToAnalyze.includes('writing_quality')) {
-      analysis.writing_quality = await this.analyzeWritingQuality(fullText);
-    }
-
-    if (typesToAnalyze.includes('citations')) {
-      const references = review.sections.find(s => s.type === 'references');
-      analysis.citations = await this.analyzeCitations(fullText, references?.content);
-    }
-
-    if (typesToAnalyze.includes('plagiarism')) {
-      analysis.plagiarism = await this.checkPlagiarism(fullText);
-    }
-
-    if (typesToAnalyze.includes('methodology')) {
-      const methodSection = review.sections.find(s => s.type === 'methodology');
-      if (methodSection) {
-        analysis.methodology = await this.analyzeMethodology(methodSection.content);
+    try {
+      if (typesToAnalyze.includes('structure')) {
+        console.log('Analyzing structure...');
+        analysis.structure = await this.analyzeStructure(review.sections);
       }
+
+      if (typesToAnalyze.includes('writing_quality')) {
+        console.log('Analyzing writing quality...');
+        analysis.writing_quality = await this.analyzeWritingQuality(fullText);
+      }
+
+      if (typesToAnalyze.includes('citations')) {
+        console.log('Analyzing citations...');
+        const references = review.sections.find(s =>
+          s.type === 'references' || s.type.includes('reference')
+        );
+        analysis.citations = await this.analyzeCitations(fullText, references?.content);
+      }
+
+      if (typesToAnalyze.includes('plagiarism')) {
+        console.log('Checking plagiarism...');
+        analysis.plagiarism = await this.checkPlagiarism(fullText);
+      }
+
+      if (typesToAnalyze.includes('methodology')) {
+        console.log('Analyzing methodology...');
+        const methodSection = review.sections.find(s =>
+          s.type === 'methodology' || s.type === 'methods'
+        );
+        if (methodSection) {
+          analysis.methodology = await this.analyzeMethodology(methodSection.content);
+        } else {
+          analysis.methodology = {
+            score: 0,
+            completeness: "0/6 key elements",
+            has_all_elements: false,
+            missing_elements: ["methodology_section"],
+            issues: [{
+              severity: 'error',
+              message: 'Methodology section is completely missing'
+            }],
+            suggestions: ['Add a methodology section describing your research approach']
+          };
+        }
+      }
+
+      if (typesToAnalyze.includes('clarity')) {
+        console.log('Analyzing clarity...');
+        analysis.clarity = await this.analyzeClarity(fullText);
+      }
+
+      if (typesToAnalyze.includes('academic_tone')) {
+        console.log('Analyzing academic tone...');
+        analysis.academic_tone = await this.analyzeAcademicTone(fullText);
+      }
+
+      // Calculate overall score
+      analysis.overall_score = this.calculateOverallScore(analysis);
+
+      // Generate suggestions
+      analysis.suggestions = await this.generateComprehensiveSuggestions(analysis, review);
+
+      // Update review
+      review.analysis = analysis;
+      review.status = 'completed';
+      review.completedAt = new Date();
+      await review.save();
+
+      console.log('Review completed successfully');
+      return analysis;
+
+    } catch (error) {
+      console.error('Analysis error:', error);
+      review.status = 'failed';
+      await review.save();
+      throw error;
     }
-
-    if (typesToAnalyze.includes('clarity')) {
-      analysis.clarity = await this.analyzeClarity(fullText);
-    }
-
-    if (typesToAnalyze.includes('academic_tone')) {
-      analysis.academic_tone = await this.analyzeAcademicTone(fullText);
-    }
-
-    // Calculate overall score
-    analysis.overall_score = this.calculateOverallScore(analysis);
-
-    // Generate suggestions
-    analysis.suggestions = await this.generateComprehensiveSuggestions(analysis, review);
-
-    // Update review
-    review.analysis = analysis;
-    review.status = 'completed';
-    review.completedAt = new Date();
-    await review.save();
-
-    return analysis;
   }
 
   /**
@@ -198,10 +257,10 @@ class PaperReviewService {
    */
   combineContent(review) {
     let text = '';
-    
+
     if (review.title) text += `Title: ${review.title}\n\n`;
     if (review.abstract) text += `Abstract: ${review.abstract}\n\n`;
-    
+
     if (review.sections) {
       review.sections.forEach(section => {
         text += `${section.type.toUpperCase()}\n${section.content}\n\n`;
@@ -212,22 +271,33 @@ class PaperReviewService {
   }
 
   /**
-   * Analyze paper structure
+   * Analyze paper structure - FIXED: Now calls AI service
    */
   async analyzeStructure(sections) {
     try {
-      const response = await axios.post(`${this.aiServiceUrl}/api/v1/ai/analyze-structure`, {
-        sections: sections.map(s => ({ type: s.type, length: s.content.length }))
-      });
+      console.log(`Calling AI service at: ${this.aiServiceUrl}/api/v1/ai/analyze-structure`);
 
+      const response = await axios.post(
+        `${this.aiServiceUrl}/api/v1/ai/analyze-structure`,
+        {
+          sections: sections.map(s => ({
+            type: s.type,
+            length: s.content.length
+          }))
+        },
+        { timeout: 30000 }
+      );
+
+      console.log('Structure analysis response received');
       return response.data;
+
     } catch (error) {
-      console.error('Structure analysis error:', error);
-      
+      console.error('Structure analysis error:', error.message);
+
       // Fallback analysis
       const required = ['abstract', 'introduction', 'methodology', 'results', 'discussion', 'conclusion', 'references'];
       const present = sections.map(s => s.type);
-      const missing = required.filter(r => !present.includes(r));
+      const missing = required.filter(r => !present.some(p => p.includes(r)));
 
       return {
         score: ((required.length - missing.length) / required.length) * 100,
@@ -248,10 +318,16 @@ class PaperReviewService {
    */
   async analyzeWritingQuality(content) {
     try {
-      const response = await axios.post(`${this.aiServiceUrl}/api/v1/ai/analyze-writing`, {
-        text: content,
-        analysis_types: ['grammar', 'style', 'clarity']
-      });
+      console.log('Calling writing quality analysis...');
+
+      const response = await axios.post(
+        `${this.aiServiceUrl}/api/v1/ai/analyze-writing`,
+        {
+          text: content.substring(0, 8000), // Limit to prevent timeout
+          analysis_types: ['grammar', 'style', 'clarity']
+        },
+        { timeout: 60000 }
+      );
 
       const data = response.data;
 
@@ -262,14 +338,15 @@ class PaperReviewService {
         clarity_issues: data.clarity?.length || 0,
         details: data
       };
+
     } catch (error) {
-      console.error('Writing quality error:', error);
+      console.error('Writing quality error:', error.message);
       return {
         score: 75,
         grammar_issues: 0,
         style_issues: 0,
         clarity_issues: 0,
-        message: 'Could not perform detailed analysis'
+        message: 'Writing quality analysis unavailable - using fallback scoring'
       };
     }
   }
@@ -283,7 +360,7 @@ class PaperReviewService {
     const inTextCitations = (content.match(citationPattern) || []).length;
 
     // Count reference entries
-    const referenceLines = references ? references.split('\n').filter(l => l.trim()) : [];
+    const referenceLines = references ? references.split('\n').filter(l => l.trim().length > 20) : [];
     const referenceCount = referenceLines.length;
 
     // Check if citations match references
@@ -294,149 +371,215 @@ class PaperReviewService {
       in_text_citations: inTextCitations,
       reference_count: referenceCount,
       mismatch,
-      issues: mismatch > 0 ? [{
+      issues: mismatch > 5 ? [{
         severity: 'warning',
-        message: `Potential citation mismatch: ${inTextCitations} in-text vs ${referenceCount} references`
+        message: `Significant citation mismatch: ${inTextCitations} in-text citations vs ${referenceCount} references (difference: ${mismatch})`
+      }] : mismatch > 0 ? [{
+        severity: 'info',
+        message: `Minor citation mismatch: ${inTextCitations} in-text vs ${referenceCount} references`
       }] : [],
       suggestions: this.generateCitationSuggestions(inTextCitations, referenceCount)
     };
   }
 
   /**
-   * Check for plagiarism
+   * Check for plagiarism - FIXED: Correct API endpoint
    */
   async checkPlagiarism(content) {
     try {
-      const response = await axios.post(`${this.aiServiceUrl.replace(':8000', ':3000')}/api/v1/plagiarism/check`, {
-        text: content
-      });
+      console.log(`Calling plagiarism service at: ${this.apiServerUrl}/api/v1/plagiarism/check`);
+
+      // FIXED: Use apiServerUrl (port 3000) not aiServiceUrl (port 8000)
+      const response = await axios.post(
+        `${this.apiServerUrl}/api/v1/plagiarism/check`,
+        {
+          text: content.substring(0, 10000) // Limit text length
+        },
+        {
+          timeout: 60000,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      const data = response.data.data;
 
       return {
-        score: 100 - response.data.data.plagiarismScore,
-        plagiarism_score: response.data.data.plagiarismScore,
-        matches: response.data.data.totalMatches,
-        level: response.data.data.summary.level,
-        details: response.data.data
+        score: 100 - data.plagiarismScore,
+        plagiarism_score: data.plagiarismScore,
+        matches: data.totalMatches,
+        level: data.summary.level,
+        details: data
       };
+
     } catch (error) {
-      console.error('Plagiarism check error:', error);
+      console.error('Plagiarism check error:', error.message);
       return {
         score: 100,
         plagiarism_score: 0,
         matches: 0,
-        message: 'Plagiarism check unavailable'
+        level: 'unknown',
+        message: 'Plagiarism check temporarily unavailable'
       };
     }
   }
 
   /**
-   * Analyze methodology section
+   * Analyze methodology section - FIXED: Now calls AI service
    */
   async analyzeMethodology(content) {
-    const hasKeyElements = {
-      research_design: /design|approach|framework/i.test(content),
-      data_collection: /collect|gather|obtain|survey|interview|questionnaire/i.test(content),
-      sample_size: /sample|participants|n\s*=/i.test(content),
-      analysis_method: /analysis|statistical|qualitative|quantitative/i.test(content),
-      validity: /valid|reliab/i.test(content),
-      ethical_approval: /ethical|IRB|consent|approval/i.test(content)
-    };
+    try {
+      console.log('Calling methodology analysis...');
 
-    const present = Object.values(hasKeyElements).filter(Boolean).length;
-    const total = Object.keys(hasKeyElements).length;
+      const response = await axios.post(
+        `${this.aiServiceUrl}/api/v1/ai/analyze-methodology`,
+        { content: content.substring(0, 5000) },
+        { timeout: 45000 }
+      );
 
-    const missing = Object.entries(hasKeyElements)
-      .filter(([key, value]) => !value)
-      .map(([key]) => key.replace(/_/g, ' '));
+      return response.data;
 
-    return {
-      score: (present / total) * 100,
-      completeness: `${present}/${total} key elements`,
-      has_all_elements: missing.length === 0,
-      missing_elements: missing,
-      issues: missing.map(m => ({
-        severity: 'warning',
-        message: `Consider adding: ${m}`
-      })),
-      suggestions: missing.map(m => `Describe your ${m}`)
-    };
+    } catch (error) {
+      console.error('Methodology analysis error:', error.message);
+
+      // Fallback: Basic keyword checking
+      const hasKeyElements = {
+        research_design: /design|approach|framework|paradigm/i.test(content),
+        data_collection: /collect|gather|obtain|survey|interview|questionnaire|observation/i.test(content),
+        sample_size: /sample|participants|subjects|n\s*=|population/i.test(content),
+        analysis_method: /analysis|statistical|qualitative|quantitative|spss|stata|nvivo/i.test(content),
+        validity: /valid|reliab|trustworth|credib/i.test(content),
+        ethical_approval: /ethical|IRB|consent|approval|ethics committee/i.test(content)
+      };
+
+      const present = Object.values(hasKeyElements).filter(Boolean).length;
+      const total = Object.keys(hasKeyElements).length;
+      const missing = Object.entries(hasKeyElements)
+        .filter(([key, value]) => !value)
+        .map(([key]) => key.replace(/_/g, ' '));
+
+      return {
+        score: (present / total) * 100,
+        completeness: `${present}/${total} key elements`,
+        has_all_elements: missing.length === 0,
+        missing_elements: missing,
+        issues: missing.map(m => ({
+          severity: 'warning',
+          message: `No clear mention of: ${m}`
+        })),
+        suggestions: missing.map(m => `Add detailed description of your ${m}`)
+      };
+    }
   }
 
   /**
-   * Analyze clarity
+   * Analyze clarity - FIXED: Now calls AI service
    */
   async analyzeClarity(content) {
-    const sentences = content.split(/[.!?]+/);
-    const words = content.split(/\s+/);
-    
-    const avgSentenceLength = words.length / sentences.length;
-    const avgWordLength = content.replace(/\s/g, '').length / words.length;
+    try {
+      console.log('Calling clarity analysis...');
 
-    // Readability scoring (simplified Flesch-Kincaid)
-    const readabilityScore = 206.835 - (1.015 * avgSentenceLength) - (84.6 * avgWordLength);
+      const response = await axios.post(
+        `${this.aiServiceUrl}/api/v1/ai/analyze-clarity`,
+        { content: content.substring(0, 5000) },
+        { timeout: 45000 }
+      );
 
-    // Complex word detection
-    const complexWords = words.filter(w => w.length > 12).length;
-    const complexWordRatio = complexWords / words.length;
+      return response.data;
 
-    return {
-      score: Math.max(0, Math.min(100, readabilityScore)),
-      readability_grade: this.getReadabilityGrade(readabilityScore),
-      avg_sentence_length: avgSentenceLength.toFixed(1),
-      avg_word_length: avgWordLength.toFixed(1),
-      complex_word_ratio: (complexWordRatio * 100).toFixed(1) + '%',
-      issues: this.getClarityIssues(avgSentenceLength, complexWordRatio),
-      suggestions: this.getClaritySuggestions(avgSentenceLength, complexWordRatio)
-    };
+    } catch (error) {
+      console.error('Clarity analysis error:', error.message);
+
+      // Fallback: Basic readability metrics
+      const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 10);
+      const words = content.split(/\s+/);
+
+      const avgSentenceLength = words.length / sentences.length;
+      const avgWordLength = content.replace(/\s/g, '').length / words.length;
+
+      // Simplified Flesch-Kincaid
+      const readabilityScore = Math.max(0, Math.min(100,
+        206.835 - (1.015 * avgSentenceLength) - (84.6 * avgWordLength)
+      ));
+
+      const complexWords = words.filter(w => w.length > 12).length;
+      const complexWordRatio = (complexWords / words.length) * 100;
+
+      return {
+        score: readabilityScore,
+        readability_grade: this.getReadabilityGrade(readabilityScore),
+        avg_sentence_length: `${avgSentenceLength.toFixed(1)} words`,
+        complex_word_ratio: `${complexWordRatio.toFixed(1)}%`,
+        issues: this.getClarityIssues(avgSentenceLength, complexWordRatio / 100),
+        suggestions: this.getClaritySuggestions(avgSentenceLength, complexWordRatio / 100)
+      };
+    }
   }
 
   /**
-   * Analyze academic tone
+   * Analyze academic tone - FIXED: Now calls AI service
    */
   async analyzeAcademicTone(content) {
-    const issues = [];
+    try {
+      console.log('Calling academic tone analysis...');
 
-    // Check for first person
-    const firstPerson = /(I|we|my|our)\s/gi;
-    const firstPersonMatches = (content.match(firstPerson) || []).length;
-    if (firstPersonMatches > 5) {
-      issues.push({
-        severity: 'warning',
-        message: `Excessive first-person usage (${firstPersonMatches} instances)`
-      });
+      const response = await axios.post(
+        `${this.aiServiceUrl}/api/v1/ai/analyze-academic-tone`,
+        { content: content.substring(0, 5000) },
+        { timeout: 45000 }
+      );
+
+      return response.data;
+
+    } catch (error) {
+      console.error('Academic tone analysis error:', error.message);
+
+      // Fallback: Basic pattern matching
+      const issues = [];
+
+      // Check for first person
+      const firstPerson = /(^|\s)(I|we|my|our|me|us)(\s|'|,|\.)/gi;
+      const firstPersonMatches = (content.match(firstPerson) || []).length;
+      if (firstPersonMatches > 10) {
+        issues.push({
+          severity: 'warning',
+          message: `Frequent first-person usage (${firstPersonMatches} instances) - consider more objective language`
+        });
+      }
+
+      // Check for contractions
+      const contractions = /(don't|can't|won't|isn't|aren't|wasn't|weren't|doesn't|didn't|haven't|hasn't|wouldn't|shouldn't|couldn't)/gi;
+      const contractionMatches = (content.match(contractions) || []).length;
+      if (contractionMatches > 0) {
+        issues.push({
+          severity: 'error',
+          message: `Found ${contractionMatches} contractions - use full forms in academic writing`
+        });
+      }
+
+      // Check for colloquialisms
+      const informal = /(a lot|kind of|sort of|basically|literally|stuff|things|gonna|wanna|pretty much)/gi;
+      const informalMatches = (content.match(informal) || []).length;
+      if (informalMatches > 5) {
+        issues.push({
+          severity: 'warning',
+          message: `Informal language detected (${informalMatches} instances)`
+        });
+      }
+
+      const score = Math.max(0, 100 - (issues.length * 15));
+
+      return {
+        score,
+        is_formal: score > 75,
+        first_person_usage: firstPersonMatches,
+        contractions: contractionMatches,
+        informal_language: informalMatches,
+        issues,
+        suggestions: this.getAcademicToneSuggestions(issues)
+      };
     }
-
-    // Check for contractions
-    const contractions = /(don't|can't|won't|isn't|aren't|wasn't|weren't)/gi;
-    const contractionMatches = (content.match(contractions) || []).length;
-    if (contractionMatches > 0) {
-      issues.push({
-        severity: 'error',
-        message: `Found ${contractionMatches} contractions - use full forms in academic writing`
-      });
-    }
-
-    // Check for colloquialisms
-    const informal = /(a lot|kind of|sort of|basically|literally|stuff|things)/gi;
-    const informalMatches = (content.match(informal) || []).length;
-    if (informalMatches > 3) {
-      issues.push({
-        severity: 'warning',
-        message: `Informal language detected (${informalMatches} instances)`
-      });
-    }
-
-    const score = Math.max(0, 100 - (issues.length * 10));
-
-    return {
-      score,
-      is_formal: score > 80,
-      first_person_usage: firstPersonMatches,
-      contractions: contractionMatches,
-      informal_language: informalMatches,
-      issues,
-      suggestions: this.getAcademicToneSuggestions(issues)
-    };
   }
 
   /**
@@ -460,7 +603,9 @@ class PaperReviewService {
       }
     });
 
-    return scores.reduce((a, b) => a + b, 0);
+    const total = scores.reduce((a, b) => a + b, 0);
+    console.log(`Overall score calculated: ${total.toFixed(1)}%`);
+    return total;
   }
 
   /**
@@ -469,49 +614,76 @@ class PaperReviewService {
   async generateComprehensiveSuggestions(analysis, review) {
     const suggestions = [];
 
-    // High priority issues
-    if (analysis.structure?.score < 70) {
-      suggestions.push({
-        priority: 'high',
-        category: 'structure',
-        title: 'Improve paper structure',
-        description: 'Your paper is missing key sections or has structural issues',
-        actions: analysis.structure.suggestions || []
-      });
-    }
-
+    // Critical: High plagiarism
     if (analysis.plagiarism?.plagiarism_score > 25) {
       suggestions.push({
         priority: 'critical',
         category: 'plagiarism',
         title: 'High plagiarism detected',
-        description: `${analysis.plagiarism.plagiarism_score}% similarity found`,
-        actions: ['Review and paraphrase similar content', 'Add proper citations', 'Use quotation marks for direct quotes']
+        description: `${analysis.plagiarism.plagiarism_score.toFixed(1)}% similarity found with existing sources`,
+        actions: [
+          'Review and paraphrase similar content',
+          'Add proper citations for borrowed ideas',
+          'Use quotation marks for direct quotes'
+        ]
       });
     }
 
-    // Medium priority
+    // High: Missing sections
+    if (analysis.structure?.score < 70) {
+      suggestions.push({
+        priority: 'high',
+        category: 'structure',
+        title: 'Improve paper structure',
+        description: analysis.structure.missing_sections.length > 0
+          ? `Missing sections: ${analysis.structure.missing_sections.join(', ')}`
+          : 'Paper structure needs improvement',
+        actions: analysis.structure.suggestions || []
+      });
+    }
+
+    // High: Poor methodology
+    if (analysis.methodology?.score < 60) {
+      suggestions.push({
+        priority: 'high',
+        category: 'methodology',
+        title: 'Strengthen methodology section',
+        description: `Missing ${analysis.methodology.missing_elements?.length || 'several'} key elements`,
+        actions: analysis.methodology.suggestions || []
+      });
+    }
+
+    // Medium: Writing quality
     if (analysis.writing_quality?.score < 75) {
+      const totalIssues = (analysis.writing_quality.grammar_issues || 0) +
+        (analysis.writing_quality.style_issues || 0) +
+        (analysis.writing_quality.clarity_issues || 0);
       suggestions.push({
         priority: 'medium',
         category: 'quality',
         title: 'Improve writing quality',
-        description: `Found ${analysis.writing_quality.grammar_issues + analysis.writing_quality.style_issues} issues`,
-        actions: ['Review grammar suggestions', 'Simplify complex sentences', 'Use active voice']
+        description: `Found ${totalIssues} grammar, style, and clarity issues`,
+        actions: [
+          'Review and fix grammar errors',
+          'Simplify complex sentences',
+          'Use active voice where appropriate',
+          'Ensure consistent tense throughout'
+        ]
       });
     }
 
+    // Medium: Academic tone
     if (analysis.academic_tone?.score < 80) {
       suggestions.push({
         priority: 'medium',
         category: 'tone',
-        title: 'Maintain academic tone',
-        description: 'Use more formal language throughout',
+        title: 'Maintain formal academic tone',
+        description: 'Use more formal, objective language',
         actions: analysis.academic_tone.suggestions || []
       });
     }
 
-    // Low priority
+    // Low: Clarity
     if (analysis.clarity?.score < 70) {
       suggestions.push({
         priority: 'low',
@@ -522,17 +694,27 @@ class PaperReviewService {
       });
     }
 
-    return suggestions.sort((a, b) => {
-      const priority = { critical: 0, high: 1, medium: 2, low: 3 };
-      return priority[a.priority] - priority[b.priority];
-    });
+    // Low: Citations
+    if (analysis.citations?.score < 90 && analysis.citations?.mismatch > 0) {
+      suggestions.push({
+        priority: 'low',
+        category: 'citations',
+        title: 'Fix citation inconsistencies',
+        description: `Citation count mismatch: ${analysis.citations.mismatch} difference`,
+        actions: analysis.citations.suggestions || []
+      });
+    }
+
+    // Sort by priority
+    const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+    return suggestions.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
   }
 
   // Helper methods
   calculateQualityScore(data) {
-    const totalIssues = (data.grammar?.length || 0) + 
-                       (data.style?.length || 0) + 
-                       (data.clarity?.length || 0);
+    const totalIssues = (data.grammar?.length || 0) +
+      (data.style?.length || 0) +
+      (data.clarity?.length || 0);
     return Math.max(0, 100 - (totalIssues * 2));
   }
 
@@ -540,23 +722,29 @@ class PaperReviewService {
     const suggestions = [];
     if (inText > references) {
       suggestions.push('Add missing references to your reference list');
+      suggestions.push('Verify all in-text citations have corresponding references');
     } else if (references > inText) {
       suggestions.push('Remove unused references or cite them in text');
+      suggestions.push('Check for uncited references in your reference list');
     }
     if (inText === 0) {
       suggestions.push('Add citations to support your claims');
+      suggestions.push('Reference relevant prior research');
+    }
+    if (suggestions.length === 0) {
+      suggestions.push('Citation formatting looks good');
     }
     return suggestions;
   }
 
   getReadabilityGrade(score) {
     if (score >= 90) return 'Very Easy (5th grade)';
-    if (score >= 80) return 'Easy (6th grade)';
-    if (score >= 70) return 'Fairly Easy (7th grade)';
-    if (score >= 60) return 'Standard (8th-9th grade)';
-    if (score >= 50) return 'Fairly Difficult (10th-12th grade)';
-    if (score >= 30) return 'Difficult (College)';
-    return 'Very Difficult (College graduate)';
+    if (score >= 80) return 'Easy (6th-7th grade)';
+    if (score >= 70) return 'Fairly Easy (8th-9th grade)';
+    if (score >= 60) return 'Standard (10th-12th grade)';
+    if (score >= 50) return 'Fairly Difficult (College)';
+    if (score >= 30) return 'Difficult (College graduate)';
+    return 'Very Difficult (Professional)';
   }
 
   getClarityIssues(avgSentenceLength, complexWordRatio) {
@@ -564,13 +752,13 @@ class PaperReviewService {
     if (avgSentenceLength > 25) {
       issues.push({
         severity: 'warning',
-        message: 'Long sentences detected - consider breaking them up'
+        message: `Long sentences detected (avg ${avgSentenceLength.toFixed(1)} words) - consider breaking them up`
       });
     }
     if (complexWordRatio > 0.2) {
       issues.push({
         severity: 'info',
-        message: 'High use of complex words - ensure clarity for readers'
+        message: `High use of complex words (${(complexWordRatio * 100).toFixed(1)}%) - ensure clarity for readers`
       });
     }
     return issues;
@@ -579,35 +767,41 @@ class PaperReviewService {
   getClaritySuggestions(avgSentenceLength, complexWordRatio) {
     const suggestions = [];
     if (avgSentenceLength > 25) {
-      suggestions.push('Break long sentences into shorter ones');
+      suggestions.push('Break long sentences (>30 words) into shorter ones');
       suggestions.push('Use transition words between sentences');
     }
     if (complexWordRatio > 0.2) {
       suggestions.push('Replace jargon with simpler terms where possible');
       suggestions.push('Define technical terms on first use');
     }
+    if (suggestions.length === 0) {
+      suggestions.push('Writing clarity is good - maintain current style');
+    }
     return suggestions;
   }
 
   getAcademicToneSuggestions(issues) {
+    if (issues.length === 0) {
+      return ['Academic tone is appropriate - well done!'];
+    }
+
     return issues.map(issue => {
       if (issue.message.includes('first-person')) {
-        return 'Use third person or passive voice';
+        return 'Use third person or passive voice for more objective tone';
       }
       if (issue.message.includes('contractions')) {
-        return 'Replace contractions with full forms';
+        return 'Replace all contractions with full forms (do not, cannot, will not)';
       }
       if (issue.message.includes('Informal')) {
-        return 'Use formal academic language';
+        return 'Replace informal language with formal academic alternatives';
       }
-      return 'Review and revise informal language';
+      return 'Review and revise for more formal academic language';
     });
   }
 
   // Additional methods for other endpoints
   async reviewSection(data) {
-    // Implementation for section-specific review
-    return { message: 'Section review not fully implemented' };
+    return { message: 'Section review functionality coming soon' };
   }
 
   async getUserReviews(userId) {
@@ -622,6 +816,7 @@ class PaperReviewService {
     const review = await PaperReview.findOne({ _id: reviewId, userId });
     if (review) {
       review.sections = updatedSections;
+      review.status = 'pending';
       await review.save();
       return await this.performComprehensiveReview(reviewId, userId);
     }
@@ -634,7 +829,6 @@ class PaperReviewService {
       throw new Error('Review not found or not analyzed');
     }
 
-    // Filter suggestions by focus areas
     let suggestions = review.analysis.suggestions;
     if (focusAreas && focusAreas.length > 0) {
       suggestions = suggestions.filter(s => focusAreas.includes(s.category));
@@ -649,7 +843,6 @@ class PaperReviewService {
       throw new Error('Review not found');
     }
 
-    // Generate report data
     return {
       reviewId,
       title: review.title,

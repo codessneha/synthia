@@ -4,10 +4,11 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
-from ...services.llm_manager import generate_completion
+from app.services.llm_manager import LLMManager
 import re
 
 router = APIRouter()
+llm_manager = LLMManager()
 
 class WritingAnalysisRequest(BaseModel):
     text: str
@@ -64,7 +65,7 @@ async def analyze_writing(request: WritingAnalysisRequest):
             Return ONLY a JSON array, no other text.
             """
             
-            grammar_result = await generate_completion(
+            grammar_result = await llm_manager.generate_completion(
                 messages=[{"role": "user", "content": grammar_prompt}],
                 temperature=0.3
             )
@@ -103,7 +104,7 @@ async def analyze_writing(request: WritingAnalysisRequest):
             Return ONLY a JSON array, no other text.
             """
             
-            style_result = await generate_completion(
+            style_result = await llm_manager.generate_completion(
                 messages=[{"role": "user", "content": style_prompt}],
                 temperature=0.5
             )
@@ -142,7 +143,7 @@ async def analyze_writing(request: WritingAnalysisRequest):
             Return ONLY a JSON array, no other text.
             """
             
-            clarity_result = await generate_completion(
+            clarity_result = await llm_manager.generate_completion(
                 messages=[{"role": "user", "content": clarity_prompt}],
                 temperature=0.4
             )
@@ -183,7 +184,7 @@ async def analyze_writing(request: WritingAnalysisRequest):
             Return ONLY a JSON array, no other text.
             """
             
-            academic_result = await generate_completion(
+            academic_result = await llm_manager.generate_completion(
                 messages=[{"role": "user", "content": academic_prompt}],
                 temperature=0.3
             )
@@ -206,7 +207,7 @@ async def analyze_writing(request: WritingAnalysisRequest):
         Text: {request.text}
         """
         
-        improvements_result = await generate_completion(
+        improvements_result = await llm_manager.generate_completion(
             messages=[{"role": "user", "content": improvements_prompt}],
             temperature=0.6
         )
@@ -246,7 +247,7 @@ async def paraphrase_text(text: str, style: str = "academic"):
         Return only the paraphrased version, nothing else.
         """
         
-        result = await generate_completion(
+        result = await llm_manager.generate_completion(
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7
         )
@@ -280,7 +281,7 @@ async def improve_sentence(sentence: str, focus: str = "clarity"):
         Return only the improved sentence, nothing else.
         """
         
-        result = await generate_completion(
+        result = await llm_manager.generate_completion(
             messages=[{"role": "user", "content": prompt}],
             temperature=0.5
         )

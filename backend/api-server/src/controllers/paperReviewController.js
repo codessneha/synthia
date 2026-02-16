@@ -1,5 +1,7 @@
-import paperReviewService from '../services/paperReviewService';
-import Paper from '../models/Paper';
+import paperReviewService from '../services/paperReviewService.js';
+import Paper from '../models/Paper.js';
+import logger from '../utils/logger.js';
+
 import multer from 'multer';
 import path from 'path';
 
@@ -63,7 +65,7 @@ export const submitDraftPaper = [
         data: review
       });
     } catch (error) {
-      console.error('Submit draft error:', error);
+      logger.error('Submit draft error:', error);
       res.status(500).json({
         success: false,
         message: 'Failed to submit draft',
@@ -92,7 +94,7 @@ export const analyzeDraft = async (req, res, next) => {
       data: analysis
     });
   } catch (error) {
-    console.error('Analyze draft error:', error);
+    logger.error('Analyze draft error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to analyze draft',
@@ -119,7 +121,7 @@ export const reviewSection = async (req, res, next) => {
       data: review
     });
   } catch (error) {
-    console.error('Section review error:', error);
+    logger.error('Section review error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to review section',
@@ -142,7 +144,7 @@ export const checkStructure = async (req, res, next) => {
       data: structureAnalysis
     });
   } catch (error) {
-    console.error('Structure check error:', error);
+    logger.error('Structure check error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to check structure',
@@ -165,7 +167,7 @@ export const checkQuality = async (req, res, next) => {
       data: quality
     });
   } catch (error) {
-    console.error('Quality check error:', error);
+    logger.error('Quality check error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to check quality',
@@ -191,7 +193,7 @@ export const checkCitations = async (req, res, next) => {
       data: citationAnalysis
     });
   } catch (error) {
-    console.error('Citation check error:', error);
+    logger.error('Citation check error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to check citations',
@@ -217,7 +219,7 @@ export const getSuggestions = async (req, res, next) => {
       data: suggestions
     });
   } catch (error) {
-    console.error('Get suggestions error:', error);
+    logger.error('Get suggestions error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to generate suggestions',
@@ -238,7 +240,7 @@ export const getReviewHistory = async (req, res, next) => {
       data: reviews
     });
   } catch (error) {
-    console.error('Get history error:', error);
+    logger.error('Get history error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get review history',
@@ -269,7 +271,7 @@ export const getReviewDetails = async (req, res, next) => {
       data: review
     });
   } catch (error) {
-    console.error('Get review error:', error);
+    logger.error('Get review error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get review',
@@ -296,7 +298,7 @@ export const reanalyze = async (req, res, next) => {
       data: updatedReview
     });
   } catch (error) {
-    console.error('Reanalyze error:', error);
+    logger.error('Reanalyze error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to reanalyze',
@@ -323,7 +325,7 @@ export const exportReport = async (req, res, next) => {
       data: report
     });
   } catch (error) {
-    console.error('Export report error:', error);
+    logger.error('Export report error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to export report',

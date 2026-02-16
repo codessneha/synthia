@@ -1,19 +1,20 @@
 import express from 'express';
 const router = express.Router();
 import {
-  submitDraftPaper,
-  analyzeDraft,
-  reviewSection,
-  checkStructure,
-  checkQuality,
-  checkCitations,
-  getSuggestions,
-  getReviewHistory,
-  getReviewDetails,
-  reanalyze,
-  exportReport
-} from '../controllers/paperReviewController';
-import { protect } from '../middleware/auth';
+    submitDraftPaper,
+    analyzeDraft,
+    reviewSection,
+    checkStructure,
+    checkQuality,
+    checkCitations,
+    getSuggestions,
+    getReviewHistory,
+    getReviewDetails,
+    reanalyze,
+    exportReport
+} from '../controllers/paperReviewController.js';
+import { protect } from '../middleware/auth.js';
+
 
 // All routes require authentication
 router.use(protect);

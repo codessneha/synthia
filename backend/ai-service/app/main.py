@@ -1,9 +1,12 @@
+import sys
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from loguru import logger
-from app.api.v1 import chat, analysis, embeddings, citations, writing
+
+from app.core.config import settings
+from app.api.v1 import chat, analysis, embeddings, citations, writing, paper_analysis
 
 # Configure logger
 logger.remove()
@@ -100,6 +103,7 @@ app.include_router(analysis.router, prefix="/api/v1/analysis", tags=["Analysis"]
 app.include_router(embeddings.router, prefix="/api/v1/embeddings", tags=["Embeddings"])
 app.include_router(citations.router, prefix="/api/v1/citations", tags=["Citations"])
 app.include_router(writing.router,prefix="/api/v1/ai",tags=["writing"])
+app.include_router(paper_analysis.router,prefix="/api/v1/ai",tags=["paper-analysis"])
 
 # Global exception handler
 @app.exception_handler(Exception)

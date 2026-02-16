@@ -15,7 +15,7 @@ import SessionDetail from './pages/Sessions/SessionDetail';
 import Citations from './pages/Citations/Citations';
 import Profile from './pages/Profile/Profile';
 import PlagiarismChecker from './pages/Plagiarism/PlagiarismChecker';
-import PaperReview from './pages/PaperReview/PaperReviewSubmission';
+import PaperReviewSubmission from './pages/PaperReview/PaperReviewSubmission';
 
 // Components
 import ProtectedRoute from './components/common/ProtectedRoute';
